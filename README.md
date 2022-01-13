@@ -5,6 +5,6 @@
 
 ## WIP (works for basic usage)
 
-Plugin using the concept of Zsh-z (gif below) for opening frequent files
+Plugin using the concept of Zsh-z (gif below) for opening frequent files. Command: zv
 
 ![Zsh-z demo](img/demo.gif)

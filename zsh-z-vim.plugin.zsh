@@ -83,19 +83,18 @@ fi
 ############################################################
 _zshzv_usage() {
   print "Usage: ${ZSHZV_CMD:-${_ZV_CMD:-zv}} [OPTION]... [ARGUMENT]
-Jump to a directory that you have visited frequently or recently, or a bit of both, based on the partial string ARGUMENT.
+Open a file that you have opened frequently or recently, or a bit of both, based on the partial string ARGUMENT.
 
-With no ARGUMENT, list the directory history in ascending rank.
+With no ARGUMENT, list the file history in ascending rank.
 
-  --add Add a directory to the database
-  -c    Only match subdirectories of the current directory
-  -e    Echo the best match without going to it
+  --add Add a file to the database
+  -c    Only match files of the current directory recursively
+  -e    Echo the best match without opening it
   -h    Display this help and exit
-  -l    List all matches without going to them
+  -l    List all matches without opening them
   -r    Match by rank
   -t    Match by recent access
-  -x    Remove a directory from the database (by default, the current directory)
-  -xR   Remove a directory and its subdirectories from the database (by default, the current directory)" |
+  -x    Remove a file from the database" |
     fold -s -w $COLUMNS >&2
 }
 
