@@ -735,24 +735,9 @@ zshzv() {
     [[ $output_format != 'completion' ]] && output_format='list'
   }
 
-  #########################################################
-  # If $ZSHZ_ECHO == 1, display paths as you jump to them.
-  # If it is also the case that $ZSHZ_TILDE == 1, display
-  # the home directory as a tilde.
-  #########################################################
-  _zshzv_echo() {
-    if (( ZSHZV_ECHO )); then
-      if (( ZSHZV_TILDE )); then
-        print ${PWD/#${HOME}/\~}
-      else
-        print $PWD
-      fi
-    fi
-  }
-
   if [[ ${@: -1} == /* ]] && (( ! $+opts[-e] && ! $+opts[-l] )); then
-    # cd if possible; echo the new path if $ZSHZ_ECHO == 1
-    [[ -f ${@: -1} ]] && ${EDITOR:-vim} ${@: -1} && _zshzv_echo && return
+    # cd if possible
+    [[ -f ${@: -1} ]] && (zshzv --add "${@: -1}" &) && ${EDITOR:-vim} ${@: -1} && return
   fi
 
   # With option -c, make sure query string matches beginning of matches;
@@ -808,13 +793,13 @@ zshzv() {
       (( ZSHZV_TILDE )) && cd=${cd/#${HOME}/\~}
       print -- "$cd"
     else
-      # cd if possible; echo the new path if $ZSHZ_ECHO == 1
-      [[ -f $cd ]] && ${EDITOR:-vim} "$cd" && _zshzv_echo
+      # cd if possible
+      [[ -f $cd ]] && (zshzv --add "$cd" &) && ${EDITOR:-vim} "$cd"
     fi
   else
-    # if $req is a valid path, cd to it; echo the new path if $ZSHZ_ECHO == 1
+    # if $req is a valid path, cd to it
     if ! (( $+opts[-e] || $+opts[-l] )) && [[ -f $req ]]; then
-      ${EDITOR:-vim} "$req" && _zshzv_echo
+      (zshzv --add "$req" &) && ${EDITOR:-vim} "$req"
     else
       return $ret2
     fi
@@ -834,10 +819,10 @@ _zshzv_preexec() {
 
   local command="$3"
 
-  local editors=$(echo ${ZSHZV_EDITORS:-"vi vim nvim emacs code gedit geany nano"})
+  local editors=${ZSHZV_EDITORS:-"vi vim nvim emacs code gedit geany nano"}
 
   # continue only if command is an editor command
-  local res=$( echo $command | sed 's/\\ /%/' | sed -E 's%([[:blank:]]*)(doas |sudo )?(([[:blank:]]*)(-[[:graph:]]* ))*([[:graph:]]+).*( ([[:graph:]]|\%)+)+%\6\7%')
+  local res=$( echo $command | sed 's/\\ /%/' | sed -E 's%([[:blank:]]*)(doas |sudo )?(([[:blank:]]*)(-[[:graph:]]* ))*([[:graph:]]+).* (([[:print:]]|\%)+)%\6 \7%')
   local editor=$(echo $res | awk '{print $1}')
 
   [ -z $(echo $editors | grep -Eo '( |^)'$editor'( |$)') ] && return
@@ -845,16 +830,16 @@ _zshzv_preexec() {
   # check if path exists and is a file
   local file=$(echo $res | awk '{print $2}' | sed 's/%/\\\\ /')
 
-  [[ $file =~ '-.*' ]] && return
+  [[ $file =~ '^-.*' ]] && return
   [ -f $file ] || return
   file=$(realpath $file)
 
   # It appears that forking a subshell is so slow in Windows that it is better
   # just to add the PWD to the datafile in the foreground
   if [[ $OSTYPE == (cygwin|msys) ]]; then
-      zshzv --add "$file"
+    zshzv --add "$file"
   else
-      (zshzv --add "$file" &)
+    (zshzv --add "$file" &)
   fi
 
   # See https://github.com/rupa/z/pull/247/commits/081406117ea42ccb8d159f7630cfc7658db054b6
