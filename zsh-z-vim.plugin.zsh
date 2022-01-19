@@ -1,4 +1,7 @@
 ################################################################################
+# TODO
+# 1. ZSHZ_EXCLUDE_DIRS(PATHS) should be able to match whole directories/single files/regex
+#
 # Zsh-z - jump around with Zsh - A native Zsh version of z without awk, sort,
 # date, or sed
 #
@@ -64,12 +67,11 @@
 #     before beginning to age (default: 9000)
 #   ZSHZ_NO_RESOLVE_SYMLINKS -> '1' prevents symlink resolution
 #   ZSHZ_OWNER -> your username (if you want use Zsh-z while using sudo -s)
-#   ZSHZ_UNCOMMON -> if 1, do not jump to "common directories," but rather drop
-#     subdirectories based on what the search string was (default: 0)
 #   ZSHZ_EDITORS -> a list a editors separated by spaces (default: 'vi vim nvim...')
 ################################################################################
 
 autoload -U is-at-least
+autoload -U regexp-replace
 
 if ! is-at-least 4.3.11; then
   print "Zsh-z-vim requires Zsh v4.3.11 or higher." >&2 && exit
@@ -536,7 +538,7 @@ zshzv() {
         ;;
 
       *)
-        if (( ! ZSHZV_UNCOMMON )) && [[ -n $common ]]; then
+        if [[ -n $common ]]; then
           _zshzv_printv -- $common
         else
           _zshzv_printv -- ${(P)match}
@@ -755,39 +757,6 @@ zshzv() {
   local cd
   cd=$REPLY
 
-  # New experimental "uncommon" behavior
-  #
-  # If the best choice at this point is something like /foo/bar/foo/bar, and the  # search pattern is `bar', go to /foo/bar/foo/bar; but if the search pattern
-  # is `foo', go to /foo/bar/foo
-  if (( ZSHZV_UNCOMMON )) && [[ -n $cd ]]; then
-    if [[ -n $cd ]]; then
-
-      # In the search pattern, replace spaces with *
-      local q=${fnd//[[:space:]]/\*}
-      q=${q%/} # Trailing slash has to be removed
-
-      # As long as the best match is not case-insensitive
-      if (( ! ZSHZV[CASE_INSENSITIVE] )); then
-        # Count the number of characters in $cd that $q matches
-        local q_chars=$(( ${#cd} - ${#${cd//${~q}/}} ))
-        # Try dropping directory elements from the right; stop when it affects
-        # how many times the search pattern appears
-        until (( ( ${#cd:h} - ${#${${cd:h}//${~q}/}} ) != q_chars )); do
-          cd=${cd:h}
-        done
-
-      # If the best match is case-insensitive
-      else
-        local q_chars=$(( ${#cd} - ${#${${cd:l}//${~${q:l}}/}} ))
-        until (( ( ${#cd:h} - ${#${${${cd:h}:l}//${~${q:l}}/}} ) != q_chars )); do
-          cd=${cd:h}
-        done
-      fi
-
-      ZSHZV[CASE_INSENSITIVE]=0
-    fi
-  fi
-
   if (( ret2 == 0 )) && [[ -n $cd ]]; then
     if (( $+opts[-e] )); then               # echo
       (( ZSHZV_TILDE )) && cd=${cd/#${HOME}/\~}
@@ -815,24 +784,26 @@ alias ${ZSHZV_CMD:-${_ZV_CMD:-zv}}='zshzv 2>&1'
 #   ZSHZV
 ############################################################
 _zshzv_preexec() {
-  # TODO get rid of (all?) the system commands to make the plugin zsh native
+  # TODO files with spaces still don't work I think
 
   local command="$3"
-
   local editors=${ZSHZV_EDITORS:-"vi vim nvim emacs code gedit geany nano"}
 
   # continue only if command is an editor command
-  local res=$( echo $command | sed 's/\\ /%/' | sed -E 's%([[:blank:]]*)(doas |sudo )?(([[:blank:]]*)(-[[:graph:]]* ))*([[:graph:]]+).* (([[:print:]]|\%)+)%\6 \7%')
-  local editor=$(echo $res | awk '{print $1}')
+  res=${command:gs/\\ /%/}
+  regexp-replace res '([[:blank:]]*)(doas |sudo )?(([[:blank:]]*)(-[[:graph:]]* ))*([[:graph:]]+).* (([[:print:]]|%)+)' '${match[6]} ${match[7]}' || return
 
-  [ -z $(echo $editors | grep -Eo '( |^)'$editor'( |$)') ] && return
+  [ ${(M)#${=editors}:#${${=res::=${command}}[1]}} -eq 0 ] && return
 
   # check if path exists and is a file
-  local file=$(echo $res | awk '{print $2}' | sed 's/%/\\\\ /')
+  local file="${${=res}[2,-1]:gs/\\//}"
 
-  [[ $file =~ '^-.*' ]] && return
-  [ -f $file ] || return
-  file=$(realpath $file)
+  [[ "$file" =~ '^-.*' ]] && return
+  regexp-replace file '^~' "$HOME" # :A doesn't expand ~ I don't know why
+  [ -f "$file" ] || return
+ 
+  # Expands file as an absolute path (uses realpath if it can)
+  file=${file:A}
 
   # It appears that forking a subshell is so slow in Windows that it is better
   # just to add the PWD to the datafile in the foreground
